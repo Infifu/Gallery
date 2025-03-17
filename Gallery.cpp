@@ -2,6 +2,7 @@
 #include <string>
 #include "MemoryAccess.h"
 #include "AlbumManager.h"
+#include <ctime>
 
 
 int getCommandNumberFromUser()
@@ -36,9 +37,15 @@ int main(void)
 	// initialize album manager
 	AlbumManager albumManager(dataAccess);
 
+	time_t tt;
+	struct tm* ti;
+	time(&tt);
+	ti = localtime(&tt);
 
 	std::string albumName;
 	std::cout << "Welcome to Gallery!" << std::endl;
+	std::cout << "Made by: Ilya" << std::endl;
+	std::cout << "Current time: " << asctime(ti)<< std::endl;
 	std::cout << "===================" << std::endl;
 	std::cout << "Type " << HELP << " to a list of all supported commands" << std::endl;
 	
