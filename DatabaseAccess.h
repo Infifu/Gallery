@@ -6,6 +6,7 @@
 #include "Picture.h"
 #include "sqlite3.h"
 #include "vector"
+#include "MyException.h"
 
 class DatabaseAccess : public IDataAccess
 {
@@ -36,12 +37,12 @@ public:
     int countAlbumsOwnedOfUser(const User& user) override; //done
     int countAlbumsTaggedOfUser(const User& user) override; //done
     int countTagsOfUser(const User& user) override; //done
-    float averageTagsPerAlbumOfUser(const User& user) override;
+    float averageTagsPerAlbumOfUser(const User& user) override; //done
 
     // queries
-    User getTopTaggedUser() override;
-    Picture getTopTaggedPicture() override;
-    std::list<Picture> getTaggedPicturesOfUser(const User& user) override;
+    User getTopTaggedUser() override; //done
+    Picture getTopTaggedPicture() override; //done
+    std::list<Picture> getTaggedPicturesOfUser(const User& user) override; //done
 
     //sql HELPERS
     std::vector<std::map<std::string, std::string>> selectQuery(const std::string& table, std::string column, std::string argument);
@@ -51,7 +52,7 @@ public:
 
     bool open() override; //done
     void close() override; //done
-    void clear() override; //to do
+    void clear() override; //done
 
 private:
     sqlite3* db;

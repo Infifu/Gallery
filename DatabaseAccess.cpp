@@ -64,7 +64,13 @@ void DatabaseAccess::createAlbum(const Album& album)
 
 void DatabaseAccess::deleteAlbum(const std::string& albumName, int userId)
 {
+    std::vector<std::map<std::string, std::string>> selected;
+    selected = DatabaseAccess::selectQuery("ALBUMS", "USER_ID", std::to_string(userId));
     DatabaseAccess::deleteQuery("ALBUMS", "NAME", std::to_string(userId));
+    for (auto const& row : selected)
+    {
+        DatabaseAccess::deleteQuery("PICTURES", "ALBUM_ID", row.at("ALBUM_ID"));
+    }
 }
 
 bool DatabaseAccess::doesAlbumExists(const std::string& albumName, int userId)
@@ -88,19 +94,30 @@ Album DatabaseAccess::openAlbum(const std::string& albumName)
 {
     std::vector<std::map<std::string, std::string>> selected;
     selected = DatabaseAccess::selectQuery("ALBUMS", "NAME", albumName);
-
+    std::string albumID;
+    Album album;
+    
     for (const auto& row : selected)
     {
-        if (!selected.empty())
-        {
-            return Album(std::stoi(row.at("USER_ID")), row.at("NAME"), row.at("CREATION_DATE"));
-        }
+        albumID = row.at("ID");
+        album.setName(row.at("NAME"));
+        album.setOwner(std::stoi(row.at("USER_ID")));
+        album.setCreationDate(row.at("CREATION_DATE"));
     }
+    
+    selected = DatabaseAccess::selectQuery("PICTURES", "ALBUM_ID", albumID);
+    for (const auto& row : selected)
+    {
+        album.addPicture(Picture(std::stoi(row.at("ID")), row.at("NAME"), row.at("LOCATION"), row.at("CREATION_DATE")));
+    }
+    return album;
 }
 
 void DatabaseAccess::closeAlbum(Album& pAlbum)
 {
-    //delete the allocated memory from THE ALBUM
+    pAlbum.setName("");
+    pAlbum.setOwner(0);
+    pAlbum.setCreationDate("");
 }
 
 void DatabaseAccess::printAlbums()
@@ -110,10 +127,7 @@ void DatabaseAccess::printAlbums()
 
     for (const auto& row : selected)
     {
-        if (!selected.empty())
-        {
-            std::cout << Album(std::stoi(row.at("USER_ID")), row.at("NAME"), row.at("CREATION_DATE"));
-        }
+        std::cout << Album(std::stoi(row.at("USER_ID")), row.at("NAME"), row.at("CREATION_DATE"));
     }
 }
 
@@ -124,10 +138,7 @@ void DatabaseAccess::printUsers()
 
     for (const auto& row : selected)
     {
-        if (!selected.empty())
-        {
-            std::cout << User(std::stoi(row.at("ID")), row.at("NAME"));
-        }
+        std::cout << User(std::stoi(row.at("ID")), row.at("NAME"));
     }
 }
 
@@ -138,10 +149,7 @@ User DatabaseAccess::getUser(int userId)
 
     for (const auto& row : selected)
     {
-        if (!selected.empty())
-        {
-            return User(std::stoi(row.at("ID")), row.at("NAME"));
-        }
+        return User(std::stoi(row.at("ID")), row.at("NAME"));
     }
 }
 
@@ -156,6 +164,7 @@ void DatabaseAccess::createUser(User& user)
 void DatabaseAccess::deleteUser(const User& user)
 {
     DatabaseAccess::deleteQuery("USERS", "ID", std::to_string(user.getId()));
+    DatabaseAccess::deleteQuery("ALBUMS", "USER_ID", std::to_string(user.getId()));
 }
 
 bool DatabaseAccess::doesUserExists(int userId)
@@ -215,22 +224,88 @@ int DatabaseAccess::countTagsOfUser(const User& user)
 
 float DatabaseAccess::averageTagsPerAlbumOfUser(const User& user)
 {
-    return 0;
+
+    int albumsTaggedCount = countAlbumsTaggedOfUser(user);
+
+    if (0 == albumsTaggedCount)
+    {
+        return 0;
+    }
+
+    return static_cast<float>(countTagsOfUser(user)) / albumsTaggedCount;
 }
 
 User DatabaseAccess::getTopTaggedUser()
 {
-    return User(1, "");
+    std::vector<std::map<std::string, std::string>> selected;
+    int mostTags = 0;
+    int currentTags = 0;
+    int ID = 0;
+    std::string name;
+    
+    selected = DatabaseAccess::selectQuery("USERS", "","");
+
+    for (const auto& row : selected)
+    {
+        currentTags = countTagsOfUser(User(std::stoi(row.at("ID")), row.at("NAME")));
+        if (currentTags > mostTags)
+        {
+            mostTags = currentTags;
+            name = row.at("NAME");
+            ID = std::stoi(row.at("ID"));
+        }
+    }
+    return User(ID, name);
 }
 
 Picture DatabaseAccess::getTopTaggedPicture()
 {
-    return Picture(1, "");
+    std::string sqlStatement = "SELECT PICTURE_ID, COUNT(*) AS count FROM tags GROUP BY PICTURE_ID ORDER BY count DESC LIMIT 1;";
+    std::vector<std::map<std::string, std::string>> selected;
+    sqlite3_stmt* stmt;
+    std::string pictureID;
+
+    int res = sqlite3_prepare_v2(db, sqlStatement.c_str(), -1, &stmt, nullptr);
+
+    if (res != SQLITE_OK)
+    {
+        std::cerr << "Error has occured while preparing the statement" << std::endl;
+    }
+
+    if (sqlite3_step(stmt) == SQLITE_ROW)
+    {
+        pictureID = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0));
+        selected = DatabaseAccess::selectQuery("PICTURES", "ID", pictureID);
+        for (const auto& row : selected)
+        {
+            return Picture(std::stoi(pictureID), row.at("NAME"), row.at("LOCATION"), row.at("CREATION_DATE"));
+        }
+    }
+    throw MyException("No tagged picture found");
 }
+
 
 std::list<Picture> DatabaseAccess::getTaggedPicturesOfUser(const User& user)
 {
-    return std::list<Picture>();
+    std::vector<std::map<std::string, std::string>> selected;
+    std::list<Picture> pictures;
+    std::string pictureID;
+    selected = DatabaseAccess::selectQuery("TAGS", "USER_ID", std::to_string(user.getId()));
+    
+
+    for (const auto& row : selected)
+    {
+        pictureID = row.at("PICTURE_ID");
+    }
+
+    selected = DatabaseAccess::selectQuery("PICTURES", "ID", pictureID);
+
+    for (const auto& row : selected)
+    {
+        pictures.push_back(Picture(std::stoi(pictureID), row.at("NAME"), row.at("LOCATION"), row.at("CREATION_DATE")));
+    }
+
+    return pictures;
 }
 
 std::vector<std::map<std::string, std::string>> DatabaseAccess::selectQuery(const std::string& table, std::string column, std::string argument)
