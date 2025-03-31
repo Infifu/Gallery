@@ -2,8 +2,10 @@
 #include "IDataAccess.h"
 #include "User.h"
 #include "Album.h"
+#include "map"
 #include "Picture.h"
 #include "sqlite3.h"
+#include "vector"
 
 class DatabaseAccess : public IDataAccess
 {
@@ -32,14 +34,20 @@ public:
 
     // user statistics
     int countAlbumsOwnedOfUser(const User& user) override; //done
-    int countAlbumsTaggedOfUser(const User& user) override;
-    int countTagsOfUser(const User& user) override;
+    int countAlbumsTaggedOfUser(const User& user) override; //done
+    int countTagsOfUser(const User& user) override; //done
     float averageTagsPerAlbumOfUser(const User& user) override;
 
     // queries
     User getTopTaggedUser() override;
     Picture getTopTaggedPicture() override;
     std::list<Picture> getTaggedPicturesOfUser(const User& user) override;
+
+    //sql HELPERS
+    std::vector<std::map<std::string, std::string>> selectQuery(const std::string& table, std::string column, std::string argument);
+    bool insertQuery(const std::string& table, std::map<std::string, std::string>);
+    bool deleteQuery(const std::string& table, std::string column, std::string argument);
+
 
     bool open() override; //done
     void close() override; //done

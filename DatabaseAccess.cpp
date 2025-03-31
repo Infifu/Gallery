@@ -21,154 +21,81 @@ void DatabaseAccess::close()
 
 void DatabaseAccess::clear()
 {
-    const char* sqlStatement = "DELETE FROM USERS;";
-    char* errMessage = nullptr;
-
-    int res = sqlite3_exec(db, sqlStatement, nullptr, nullptr, &errMessage);
-    if (res != SQLITE_OK)
-    {
-        std::cerr << "error: " << errMessage << std::endl;
-        sqlite3_free(errMessage);
-    }
-
-    sqlStatement = "DELETE FROM ALBUMS;";
-    errMessage = nullptr;
-    res = sqlite3_exec(db, sqlStatement, nullptr, nullptr, &errMessage);
-    if (res != SQLITE_OK)
-    {
-        std::cerr << "error: " << errMessage << std::endl;
-        sqlite3_free(errMessage);
-    }
+    DatabaseAccess::deleteQuery("PICTURES","","");
+    DatabaseAccess::deleteQuery("ALBUMS","","");
+    DatabaseAccess::deleteQuery("TAGS","","");
+    DatabaseAccess::deleteQuery("USERS","","");
 }
 
 const std::list<Album> DatabaseAccess::getAlbums()
 {
+    std::vector<std::map<std::string, std::string>> selected;
     std::list<Album> albums;
-    std::string sqlStatement = "SELECT * FROM ALBUMS;";
-    sqlite3_stmt* stmt;
-    char* errMessage = nullptr;
-    int res = sqlite3_prepare_v2(db, sqlStatement.c_str(), -1, &stmt, nullptr);
-
-    if (res != SQLITE_OK)
+    selected = DatabaseAccess::selectQuery("ALBUMS", "", "");
+    for (auto& row : selected)
     {
-        std::cerr << "error: Failed to prepare statement" << std::endl;
+        albums.push_back(Album(std::stoi(row.at("USER_ID")), row.at("NAME"), row.at("CREATION_DATE")));
     }
-
-    while ((res = sqlite3_step(stmt)) == SQLITE_ROW)
-    {
-        std::string name = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1));
-        std::string creationDate = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2));
-        int user_ID = sqlite3_column_int(stmt, 3);
-        albums.push_back(Album(user_ID, name, creationDate));
-    }
-
-    sqlite3_finalize(stmt);
     return albums;
 }
 
 const std::list<Album> DatabaseAccess::getAlbumsOfUser(const User& user)
 {
+    std::vector<std::map<std::string, std::string>> selected;
+
     std::list<Album> albums;
-    std::string sqlStatement = "SELECT * FROM ALBUMS WHERE USER_ID = " + std::to_string(user.getId()) + ";";
-    sqlite3_stmt* stmt;
-    char* errMessage = nullptr;
-    int res = sqlite3_prepare_v2(db, sqlStatement.c_str(), -1, &stmt, nullptr);
+    selected = DatabaseAccess::selectQuery("ALBUMS", "USER_ID",std::to_string(user.getId()));
 
-    if (res != SQLITE_OK)
+    for (auto& row : selected)
     {
-        std::cerr << "error: Failed to prepare statement" << std::endl;
+        albums.push_back(Album(std::stoi(row.at("USER_ID")), row.at("NAME"), row.at("CREATION_DATE")));
     }
-
-    while ((res = sqlite3_step(stmt)) == SQLITE_ROW)
-    {
-        std::string name = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1));
-        std::string creationDate = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2));
-        int user_ID = sqlite3_column_int(stmt, 3);
-        albums.push_back(Album(user_ID, name, creationDate));
-    }
-
-    sqlite3_finalize(stmt);
     return albums;
 }
 
 void DatabaseAccess::createAlbum(const Album& album)
 {
-    std::string sqlStatement = "INSERT INTO ALBUMS (NAME, CREATION_DATE, USER_ID) VALUES ('" + album.getName() + "', '" + album.getCreationDate() + "', " + std::to_string(album.getOwnerId()) + ");";
-    char* errMessage = nullptr;
-    int res = sqlite3_exec(db, sqlStatement.c_str(), nullptr, nullptr, &errMessage);
-    if (res != SQLITE_OK)
-    {
-        std::cerr << "error: " << errMessage << std::endl;
-        sqlite3_free(errMessage);
-    }
+    std::map<std::string, std::string> values;
+    values.insert({ "NAME",album.getName() });
+    values.insert({ "CREATION_DATE",album.getCreationDate() });
+    values.insert({ "USER_ID",std::to_string(album.getOwnerId()) });
+    DatabaseAccess::insertQuery("ALBUMS", values);
 }
 
 void DatabaseAccess::deleteAlbum(const std::string& albumName, int userId)
 {
-    std::string sqlStatement = "DELETE FROM ALBUMS WHERE NAME = '" + albumName + "' AND USER_ID = '" + std::to_string(userId) + "';";
-
-    char* errMessage = nullptr;
-    int res = sqlite3_exec(db, sqlStatement.c_str(), nullptr, nullptr, &errMessage);
-
-    if (res != SQLITE_OK)
-    {
-        std::cerr << "error: " << errMessage << std::endl;
-        sqlite3_free(errMessage);
-    }
+    DatabaseAccess::deleteQuery("ALBUMS", "NAME", std::to_string(userId));
 }
 
 bool DatabaseAccess::doesAlbumExists(const std::string& albumName, int userId)
 {
-    std::string sqlStatement = "SELECT * FROM ALBUMS WHERE name = '" + albumName + "';";
-
-    sqlite3_stmt* stmt;
-    char* errMessage = nullptr;
-    int res = sqlite3_prepare_v2(db, sqlStatement.c_str(), -1, &stmt, nullptr);
-
-    if (res != SQLITE_OK)
+    std::vector<std::map<std::string, std::string>> selected;
+    selected = DatabaseAccess::selectQuery("ALBUMS", "NAME", albumName);
+    for (const auto& row : selected)
     {
-        std::cerr << "error: Failed to prepare statement" << std::endl;
-        return false;
-    }
-
-    res = sqlite3_step(stmt);
-    if (res == SQLITE_ROW)
-    {
-        sqlite3_finalize(stmt);
-        return true;
-    }
-    else
-    {
-        sqlite3_finalize(stmt);
-        return false;
+        if (row.at("USER_ID") == std::to_string(userId))
+        {
+            return true;
+        }
+        else
+        {
+            return false;
+        }
     }
 }
 
 Album DatabaseAccess::openAlbum(const std::string& albumName)
 {
-    std::string sqlStatement = "SELECT * FROM ALBUMS WHERE name = '" + albumName + "';";
+    std::vector<std::map<std::string, std::string>> selected;
+    selected = DatabaseAccess::selectQuery("ALBUMS", "NAME", albumName);
 
-    sqlite3_stmt* stmt;
-    char* errMessage = nullptr;
-    int res = sqlite3_prepare_v2(db, sqlStatement.c_str(), -1, &stmt, nullptr);
-
-    if (res != SQLITE_OK)
+    for (const auto& row : selected)
     {
-        std::cerr << "error: Failed to prepare statement" << std::endl;
-        return Album();
+        if (!selected.empty())
+        {
+            return Album(std::stoi(row.at("USER_ID")), row.at("NAME"), row.at("CREATION_DATE"));
+        }
     }
-
-    res = sqlite3_step(stmt);
-    if (res == SQLITE_ROW)
-    {
-        int userID = sqlite3_column_int(stmt, 4);
-        std::string name = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2));
-        std::string creation_date = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 3));
-        sqlite3_finalize(stmt);
-        return Album(userID, name, creation_date);
-    }
-    sqlite3_finalize(stmt);
-    return Album();
 }
 
 void DatabaseAccess::closeAlbum(Album& pAlbum)
@@ -178,125 +105,67 @@ void DatabaseAccess::closeAlbum(Album& pAlbum)
 
 void DatabaseAccess::printAlbums()
 {
-    std::string sqlStatement = "SELECT * FROM ALBUMS;";
-    sqlite3_stmt* stmt;
-    char* errMessage = nullptr;
-    int res = sqlite3_prepare_v2(db, sqlStatement.c_str(), -1, &stmt, nullptr);
+    std::vector<std::map<std::string, std::string>> selected;
+    selected = DatabaseAccess::selectQuery("ALBUMS", "", "");
 
-    if (res != SQLITE_OK)
+    for (const auto& row : selected)
     {
-        std::cerr << "error: Failed to prepare statement" << std::endl;
-        return;
+        if (!selected.empty())
+        {
+            std::cout << Album(std::stoi(row.at("USER_ID")), row.at("NAME"), row.at("CREATION_DATE"));
+        }
     }
-
-    while ((res = sqlite3_step(stmt)) == SQLITE_ROW)
-    {
-        int userID = sqlite3_column_int(stmt, 4);
-        std::string name = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2));
-        std::string creation_date = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 3));
-        std::cout << Album(userID, name, creation_date) << std::endl;
-    }
-
-    sqlite3_finalize(stmt);
-    return;
 }
 
 void DatabaseAccess::printUsers()
 {
-    std::string sqlStatement = "SELECT * FROM USERS;";
-    sqlite3_stmt* stmt;
-    char* errMessage = nullptr;
-    int res = sqlite3_prepare_v2(db, sqlStatement.c_str(), -1, &stmt, nullptr);
+    std::vector<std::map<std::string, std::string>> selected;
+    selected = DatabaseAccess::selectQuery("USERS", "", "");
 
-    if (res != SQLITE_OK)
+    for (const auto& row : selected)
     {
-        std::cerr << "error: Failed to prepare statement" << std::endl;
-        return;
+        if (!selected.empty())
+        {
+            std::cout << User(std::stoi(row.at("ID")), row.at("NAME"));
+        }
     }
-
-    while ((res = sqlite3_step(stmt)) == SQLITE_ROW)
-    {
-        int userID = sqlite3_column_int(stmt, 0);
-        std::string name = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1));
-        std::cout << User(userID, name) << std::endl;
-    }
-
-    sqlite3_finalize(stmt);
-    return;
 }
 
 User DatabaseAccess::getUser(int userId)
 {
-    std::string sqlStatement = ("SELECT * FROM USERS WHERE ID = " + std::to_string(userId));
-    sqlite3_stmt* stmt;
-    char* errMessage = nullptr;
-    int res = sqlite3_prepare_v2(db, sqlStatement.c_str(), -1, &stmt, nullptr);
+    std::vector<std::map<std::string, std::string>> selected;
+    selected = DatabaseAccess::selectQuery("USERS", "ID", std::to_string(userId));
 
-    if (res != SQLITE_OK)
+    for (const auto& row : selected)
     {
-        std::cerr << "error: Failed to prepare statement" << std::endl;
-        return User(-1, "ERROR");
+        if (!selected.empty())
+        {
+            return User(std::stoi(row.at("ID")), row.at("NAME"));
+        }
     }
-
-    res = sqlite3_step(stmt);
-    if (res == SQLITE_ROW)
-    {
-        std::string name = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1));
-        sqlite3_finalize(stmt);
-        return User(userId, name);
-    }
-    return User(-1, "ERROR");
 }
 
 void DatabaseAccess::createUser(User& user)
 {
-    std::string sqlStatement = "INSERT INTO USERS (ID, NAME) VALUES ('" + std::to_string(user.getId()) + "', '" + user.getName() + "');";
-    char* errMessage = nullptr;
-    int res = sqlite3_exec(db, sqlStatement.c_str(), nullptr, nullptr, &errMessage);
-    if (res != SQLITE_OK)
-    {
-        std::cerr << "error: " << errMessage << std::endl;
-        sqlite3_free(errMessage);
-    }
+    std::map<std::string, std::string> values;
+    values.insert({ "ID",std::to_string(user.getId()) });
+    values.insert({ "NAME",user.getName() });
+    DatabaseAccess::insertQuery("USERS", values);
 }
 
 void DatabaseAccess::deleteUser(const User& user)
 {
-    std::string sqlStatement = "DELETE FROM USERS WHERE ID = '" + std::to_string(user.getId()) + "' AND NAME = '" + user.getName() + "');";
-    char* errMessage = nullptr;
-    int res = sqlite3_exec(db, sqlStatement.c_str(), nullptr, nullptr, &errMessage);
-    if (res != SQLITE_OK)
-    {
-        std::cerr << "error: " << errMessage << std::endl;
-        sqlite3_free(errMessage);
-    }
+    DatabaseAccess::deleteQuery("USERS", "ID", std::to_string(user.getId()));
 }
 
 bool DatabaseAccess::doesUserExists(int userId)
 {
-    std::string sqlStatement = "SELECT * FROM USERS WHERE ID = " + std::to_string(userId) + ";";
-
-    sqlite3_stmt* stmt;
-    char* errMessage = nullptr;
-    int res = sqlite3_prepare_v2(db, sqlStatement.c_str(), -1, &stmt, nullptr);
-
-    if (res != SQLITE_OK)
-    {
-        std::cerr << "error: Failed to prepare statement" << std::endl;
-        return false;
-    }
-
-    res = sqlite3_step(stmt);
-    if (res == SQLITE_ROW)
-    {
-        sqlite3_finalize(stmt);
+    std::vector<std::map<std::string, std::string>> selected;
+    selected = DatabaseAccess::selectQuery("USERS", "ID", std::to_string(userId));
+    if (!selected.empty())
         return true;
-    }
     else
-    {
-        sqlite3_finalize(stmt);
         return false;
-    }
 }
 
 int DatabaseAccess::countAlbumsOwnedOfUser(const User& user)
@@ -307,17 +176,46 @@ int DatabaseAccess::countAlbumsOwnedOfUser(const User& user)
 
 int DatabaseAccess::countAlbumsTaggedOfUser(const User& user)
 {
-    return 0;
+    int albumsCount = 0;
+    std::set<int> albumsID;
+    std::vector<int> picturesID;
+
+    std::vector<std::map<std::string, std::string>> selected;
+    selected = DatabaseAccess::selectQuery("TAGS", "USER_ID", std::to_string(user.getId()));
+    for (const auto& row : selected)
+    {
+        picturesID.push_back(std::stoi(row.at("PICTURE_ID")));
+    }
+
+    for (auto const& picture : picturesID)
+    {
+        selected = DatabaseAccess::selectQuery("PICTURES", "ID", std::to_string(picture));
+        for (const auto& row : selected)
+        {
+            albumsID.insert(std::stoi(row.at("ALBUM_ID")));
+        }
+    }
+    return albumsID.size();
 }
+
+
 
 int DatabaseAccess::countTagsOfUser(const User& user)
 {
-    return 0;
+    int tagOfUser = 0;
+    std::vector<std::map<std::string, std::string>> selected;
+    selected = DatabaseAccess::selectQuery("TAGS", "USER_ID", std::to_string(user.getId()));
+
+    for (const auto& row : selected)
+    {
+        tagOfUser++;
+    }
+    return tagOfUser;
 }
 
 float DatabaseAccess::averageTagsPerAlbumOfUser(const User& user)
 {
-    return 0.0f;
+    return 0;
 }
 
 User DatabaseAccess::getTopTaggedUser()
@@ -335,133 +233,170 @@ std::list<Picture> DatabaseAccess::getTaggedPicturesOfUser(const User& user)
     return std::list<Picture>();
 }
 
-void DatabaseAccess::addPictureToAlbumByName(const std::string& albumName, const Picture& picture)
+std::vector<std::map<std::string, std::string>> DatabaseAccess::selectQuery(const std::string& table, std::string column, std::string argument)
 {
-    std::string sqlStatement = "SELECT * FROM ALBUMS WHERE NAME = '" + albumName + "';";
-
+    std::vector<std::map<std::string, std::string>> selected;
+    std::string sqlStatement;
     sqlite3_stmt* stmt;
-    char* errMessage = nullptr;
+
+    if (argument.empty() && column.empty())
+        sqlStatement = "SELECT * FROM " + table;
+    else 
+        sqlStatement = "SELECT * FROM " + table + " WHERE " + column + " = '" + argument + "';";
+
     int res = sqlite3_prepare_v2(db, sqlStatement.c_str(), -1, &stmt, nullptr);
 
     if (res != SQLITE_OK)
     {
         std::cerr << "error: Failed to prepare statement" << std::endl;
-        return;
+        return {}; 
     }
 
-    res = sqlite3_step(stmt);
-    if (res == SQLITE_ROW)
+    while ((res = sqlite3_step(stmt)) == SQLITE_ROW)
     {
-        int albumID = sqlite3_column_int(stmt, 0);
-        sqlite3_finalize(stmt);
-
-        sqlStatement = "INSERT INTO PICTURES (NAME,LOCATION,CREATION_DATE,ALBUM_ID) VALUES (";
-        sqlStatement += "'" + picture.getName() + "', '" + picture.getPath() + "', '" + picture.getCreationDate() + "', " + std::to_string(picture.getId()) + ");";
-
-        res = sqlite3_prepare_v2(db, sqlStatement.c_str(), -1, &stmt, nullptr);
-
-        if (res != SQLITE_OK)
+        std::map<std::string, std::string> row;
+        int colCount = sqlite3_column_count(stmt);
+        for (int i = 0; i < colCount; i++)
         {
-            std::cerr << "error: Failed to prepare statement" << std::endl;
-            return;
+            std::string column_name = sqlite3_column_name(stmt, i);
+
+            if (sqlite3_column_type(stmt, i) == SQLITE_TEXT)
+            {
+                row[column_name] = reinterpret_cast<const char*>(sqlite3_column_text(stmt, i));
+            }
+            else if (sqlite3_column_type(stmt, i) == SQLITE_INTEGER)
+            {
+                row[column_name] = std::to_string(sqlite3_column_int(stmt, i));
+            }
         }
+        selected.push_back(row);
     }
+
+    sqlite3_finalize(stmt);
+    return selected;
+}
+
+bool DatabaseAccess::insertQuery(const std::string& table, std::map<std::string, std::string> values)
+{
+    std::string sqlStatement;
+    sqlite3_stmt* stmt;
+    char* errMessage = nullptr;
+
+    if (table == "ALBUMS")
+    {
+        sqlStatement = "INSERT INTO ALBUMS (NAME, CREATION_DATE, USER_ID) VALUES (";
+        sqlStatement += "'" + values.at("NAME") + "', '" + values.at("CREATION_DATE") + "', " + values.at("USER_ID") + ");";
+    }
+    else if (table == "PICTURES")
+    {
+        sqlStatement = "INSERT INTO PICTURES (NAME, LOCATION, CREATION_DATE, ALBUM_ID) VALUES (";
+        sqlStatement += "'" + values.at("NAME") + "', '" + values.at("LOCATION") + "', '" + values.at("CREATION_DATE") + "', " + values.at("ALBUM_ID") + ");";
+    }
+    else if (table == "TAGS")
+    {
+        sqlStatement = "INSERT INTO TAGS (PICTURE_ID, USER_ID) VALUES (";
+        sqlStatement += values.at("PICTURE_ID") + ", " + values.at("USER_ID") + ");";
+    }
+    else if (table == "USERS")
+    {
+        sqlStatement = "INSERT INTO USERS (ID, NAME) VALUES (";
+        sqlStatement += values.at("ID") + ", '" + values.at("NAME") + "');";
+    }
+
+    int res = sqlite3_exec(db, sqlStatement.c_str(), nullptr, nullptr, &errMessage);
+
+    if (res != SQLITE_OK)
+    {
+        std::cerr << "error: " << errMessage << std::endl;
+        return false;
+    }
+    return true;
+}
+
+bool DatabaseAccess::deleteQuery(const std::string& table, std::string column, std::string argument)
+{
+    std::string sqlStatement;
+    sqlite3_stmt* stmt;
+    char* errMessage = nullptr;
+
+    if (column.empty() && argument.empty())
+        sqlStatement = "DELETE FROM " + table + ";";
+    else
+        sqlStatement = "DELETE FROM " + table + " WHERE " + column + " = '" + argument + "';";
+
+    int res = sqlite3_exec(db, sqlStatement.c_str(), nullptr, nullptr, &errMessage);
+
+    if (res != SQLITE_OK)
+    {
+        std::cerr << "error: " << errMessage << std::endl;
+        sqlite3_free(errMessage);
+        return false;
+    }
+    return true;
+}
+
+
+void DatabaseAccess::addPictureToAlbumByName(const std::string& albumName, const Picture& picture)
+{
+    int albumID = 0;
+    std::vector<std::map<std::string, std::string>> selected;
+    std::map<std::string, std::string> values;
+    selected = DatabaseAccess::selectQuery("ALBUMS", "NAME", albumName);
+
+    for (const auto& row : selected)
+    {
+        albumID = std::stoi(row.at("ID"));
+        values.insert({ "NAME",picture.getName() });
+        values.insert({ "LOCATION",picture.getPath() });
+        values.insert({ "CREATION_DATE",picture.getCreationDate() });
+        values.insert({ "ALBUM_ID",std::to_string(albumID) });
+        break;
+    }
+    DatabaseAccess::insertQuery("PICTURES", values);
 }
 
 void DatabaseAccess::removePictureFromAlbumByName(const std::string& albumName, const std::string& pictureName)
 {
-    std::string sqlStatement = "SELECT * FROM ALBUMS WHERE NAME = '" + albumName + "';";
+    std::string albumID;
+    std::vector<std::map<std::string, std::string>> selected;
+    selected = DatabaseAccess::selectQuery("ALBUMS", "NAME", albumName);
 
-    sqlite3_stmt* stmt;
-    char* errMessage = nullptr;
-    int res = sqlite3_prepare_v2(db, sqlStatement.c_str(), -1, &stmt, nullptr);
-
-    if (res != SQLITE_OK)
+    for (const auto& row : selected)
     {
-        std::cerr << "error: Failed to prepare statement" << std::endl;
-        return;
+        albumID = row.at("ID");
     }
 
-    res = sqlite3_step(stmt);
-    if (res == SQLITE_ROW)
-    {
-        int albumID = sqlite3_column_int(stmt, 0);
-        sqlite3_finalize(stmt);
-
-        //find the pictures with matching albumID
-        sqlStatement = "DELETE FROM PICTURES WHERE ID = " + std::to_string(albumID) + " AND NAME = '" + pictureName + "';";
-        res = sqlite3_prepare_v2(db, sqlStatement.c_str(), -1, &stmt, nullptr);
-
-        if (res != SQLITE_OK)
-        {
-            std::cerr << "error: Failed to prepare statement" << std::endl;
-            return;
-        }
-        sqlite3_finalize(stmt);
-    }
+    DatabaseAccess::deleteQuery("PICTURES", "ALBUM_ID", albumID);
 }
 
 void DatabaseAccess::tagUserInPicture(const std::string& albumName, const std::string& pictureName, int userId)
 {
-    std::string sqlStatement = "SELECT id FROM pictures WHERE name = '" + pictureName + "';";
+    std::string pictureID;
+    std::vector<std::map<std::string, std::string>> selected;
+    std::map<std::string, std::string> values;
+    selected = DatabaseAccess::selectQuery("PICTURES", "NAME", pictureName);
 
-    sqlite3_stmt* stmt;
-    char* errMessage = nullptr;
-    int res = sqlite3_prepare_v2(db, sqlStatement.c_str(), -1, &stmt, nullptr);
-
-    if (res != SQLITE_OK)
+    for (const auto& row : selected)
     {
-        std::cerr << "error: Failed to prepare statement" << std::endl;
-        return;
+        pictureID = row.at("ID");
+        break;
     }
 
-    res = sqlite3_step(stmt);
-    if (res == SQLITE_ROW)
-    {
-        int pictureId = sqlite3_column_int(stmt, 0);
-        sqlite3_finalize(stmt);
-
-        sqlStatement = "INSERT INTO TAGS (PICTURE_ID, USER_ID) VALUES ('" + std::to_string(pictureId) + "', '" + std::to_string(userId) + "');";
-        res = sqlite3_exec(db, sqlStatement.c_str(), nullptr, nullptr, &errMessage);
-
-        if (res != SQLITE_OK)
-        {
-            std::cerr << "error: " << errMessage << std::endl;
-            sqlite3_free(errMessage);
-        }
-    }
-    else
-    {
-        sqlite3_finalize(stmt);
-        return;
-    }
+    values.insert({ "PICTURE_ID",pictureID });
+    values.insert({ "USER_ID",std::to_string(userId)});
+    DatabaseAccess::insertQuery("TAGS", values);
 }
 
 void DatabaseAccess::untagUserInPicture(const std::string& albumName, const std::string& pictureName, int userId)
 {
-    std::string sqlStatement = "SELECT id FROM pictures WHERE name = '" + pictureName + "';";
+    std::string pictureID;
+    std::vector<std::map<std::string, std::string>> selected;
+    selected = DatabaseAccess::selectQuery("PICTURES", "NAME", pictureName);
 
-    sqlite3_stmt* stmt;
-    char* errMessage = nullptr;
-    int res = sqlite3_prepare_v2(db, sqlStatement.c_str(), -1, &stmt, nullptr);
-
-    if (res != SQLITE_OK)
+    for (const auto& row : selected)
     {
-        std::cerr << "error: Failed to prepare statement" << std::endl;
-        return;
+        pictureID = row.at("ID");
     }
 
-    res = sqlite3_step(stmt);
-    if (res == SQLITE_ROW)
-    {
-        int pictureId = sqlite3_column_int(stmt, 0);
-        sqlite3_finalize(stmt);
-
-        sqlStatement = "DELETE FROM TAGS WHERE id = " + std::to_string(pictureId) + ";";
-        res = sqlite3_exec(db, sqlStatement.c_str(), nullptr, nullptr, &errMessage);
-    }
-    else
-    {
-        std::cerr << "error: picture with this name wasnt found" << std::endl;
-    }
+    DatabaseAccess::deleteQuery("TAGS", "ID", pictureID);
 }
