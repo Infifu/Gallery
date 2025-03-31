@@ -3,6 +3,7 @@
 #include "Constants.h"
 #include "MyException.h"
 #include "AlbumNotOpenException.h"
+#include <Windows.h>
 
 
 AlbumManager::AlbumManager(IDataAccess& dataAccess) :
@@ -203,10 +204,51 @@ void AlbumManager::showPicture()
 		throw MyException("Error: Can't open <" + picName+ "> since it doesnt exist on disk.\n");
 	}
 
-	// Bad practice!!!
-	// Can lead to privileges escalation
-	// You will replace it on WinApi Lab(bonus)
-	system(pic.getPath().c_str()); 
+	int option;
+	std::cout << "Choose opening option: " << std::endl;
+	std::cout << "1.Regular " << std::endl;
+	std::cout << "2.Paint " << std::endl;
+	std::cout << "3.IrfanView " << std::endl;
+	std::cin >> option;
+	std::string command;
+
+
+	switch (option)
+	{
+	case 1:
+		command = "explorer.exe " + pic.getPath();
+		break;
+	case 2:
+		command = "mspaint.exe " + pic.getPath();
+		break;
+	case 3:
+		command = "C:\\Program Files\\IrfanView\\i_view64.exe " + pic.getPath();
+		break;
+	default:
+		throw MyException("Option is not valid");
+		break;
+	}
+
+	STARTUPINFO si{ sizeof(STARTUPINFO) };
+	PROCESS_INFORMATION pi;
+
+	if (CreateProcess(
+		NULL,               
+		const_cast<char*>(command.c_str()),
+		NULL,              
+		NULL,               
+		FALSE,              
+		0,                  
+		NULL,             
+		NULL,               
+		&si,               
+		&pi                 
+	))
+	{
+		WaitForSingleObject(pi.hProcess, INFINITE);
+		CloseHandle(pi.hProcess);
+		CloseHandle(pi.hThread);
+	}
 }
 
 void AlbumManager::tagUserInPicture()
