@@ -66,10 +66,11 @@ void DatabaseAccess::deleteAlbum(const std::string& albumName, int userId)
 {
     std::vector<std::map<std::string, std::string>> selected;
     selected = DatabaseAccess::selectQuery("ALBUMS", "USER_ID", std::to_string(userId));
-    DatabaseAccess::deleteQuery("ALBUMS", "NAME", std::to_string(userId));
+    DatabaseAccess::deleteQuery("ALBUMS", "NAME", albumName);
     for (auto const& row : selected)
     {
-        DatabaseAccess::deleteQuery("PICTURES", "ALBUM_ID", row.at("ALBUM_ID"));
+        if (row.find("ALBUM_ID") != row.end())
+            DatabaseAccess::deleteQuery("PICTURES", "ALBUM_ID", row.at("ALBUM_ID"));
     }
 }
 
@@ -93,10 +94,11 @@ bool DatabaseAccess::doesAlbumExists(const std::string& albumName, int userId)
 Album DatabaseAccess::openAlbum(const std::string& albumName)
 {
     std::vector<std::map<std::string, std::string>> selected;
+    std::vector<std::map<std::string, std::string>> tags;
     selected = DatabaseAccess::selectQuery("ALBUMS", "NAME", albumName);
     std::string albumID;
     Album album;
-    
+
     for (const auto& row : selected)
     {
         albumID = row.at("ID");
@@ -104,11 +106,23 @@ Album DatabaseAccess::openAlbum(const std::string& albumName)
         album.setOwner(std::stoi(row.at("USER_ID")));
         album.setCreationDate(row.at("CREATION_DATE"));
     }
-    
+
     selected = DatabaseAccess::selectQuery("PICTURES", "ALBUM_ID", albumID);
     for (const auto& row : selected)
     {
         album.addPicture(Picture(std::stoi(row.at("ID")), row.at("NAME"), row.at("LOCATION"), row.at("CREATION_DATE")));
+    }
+
+    std::list<Picture> pics = album.getPictures();
+    for (auto& pic : pics)
+    {
+        tags = DatabaseAccess::selectQuery("TAGS", "PICTURE_ID", std::to_string(pic.getId()));
+        for (auto& tag : tags)
+        {
+            pic.tagUser(std::stoi(tag.at("USER_ID")));
+            album.removePicture(pic.getName());
+            album.addPicture(pic);
+        }
     }
     return album;
 }
